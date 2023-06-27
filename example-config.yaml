@@ -1,0 +1,446 @@
+#
+# This is a sample config file for RedWardenLite.
+#
+
+
+#
+# ====================================================
+# General proxy related settings
+# ====================================================
+#
+
+# Print verbose output. Implied if debug=True. Default: False
+verbose: True
+
+# Print debugging output that includes HTTP request/response trace. Default: False
+debug: False
+
+# Redirect RedWardenLite output to file. Default: stdout.
+# Creates a file in the same directory that this config file is situated.
+output: redwarden_redirector.log
+
+# Write web server access attempts in Apache2 access.log format into this file.
+access_log: redwarden_access.log
+
+# Switches between one of the following pre-defined log formats:
+# - 'apache2' combined access_log
+# - 'redelk' log format
+access_log_format: apache2
+
+#
+# ===================================
+# RedELK Integration
+#
+#
+# If RedWardenLite is to be integrated with RedElk, following three variables will have to be set
+# according to this redirector server role.
+#
+
+# Label marking packets coming from this specific Proxy server.
+# Can be anything, but nice candidates are:
+# - http, http-proxy, http-trackingpixel1, phishingwebsite, etc
+redelk_frontend_name: http-redwarden
+
+# Label for packets that are passed to the C2 server.
+# This value MUST start with "c2" and cannot contain spaces.
+redelk_backend_name_c2: c2
+
+# Label for packets that are NOT passed to the C2 (they either dropped, redirected, proxied away).
+# This value MUST start wtih "decoy" and cannot contain spaces.
+redelk_backend_name_decoy: decoy
+
+# ===================================
+
+# If 'output' is specified, tee program's output to file and stdout at the same time.
+# Default: False
+tee: True
+
+
+#
+# Ports on which RedWardenLite should bind & listen
+#
+port:
+  - 80/http
+  - 443/https
+#  - 18800/http
+
+#
+# SSL certificate CAcert (pem, crt, cert) and private key CAkey.
+#
+ssl_cacert: certs/fullchain.pem
+ssl_cakey: certs/privkey.key
+#ssl_cacert: /etc/letsencrypt/live/attacker.com/fullchain.pem
+#ssl_cakey: /etc/letsencrypt/live/attacker.com/privkey.pem
+
+
+#
+# Drop invalid HTTP requests
+#
+# If a stream that doesn't resemble valid HTTP protocol reaches RedWardenLite listener,
+# should we drop it or process it? By default we drop it.
+#
+# Default: True
+#
+drop_invalid_http_requests: True
+
+
+
+#
+# (Required) Address to which legitimate inbound traffic (traffic that passes the defined rules) should be redirected.
+# In the format of:
+#       [inport:][http(s)://]host:port
+#
+# If RedWardenLite is configured to listen on more than one port, specifying "inport"  will
+# help the plugin decide which destination URL listener should redirect the inbound request.
+#
+# If 'inport' values are not specified in the option below (destination_url), the script
+# will select a destination URL at random.
+#
+# If RedWardenLite is listening on only one port, it's not mandatory to include the "inport" part.
+# This field can be either a string or a list of strings.
+#
+destination_url:
+#  - 18800://example.org:18800
+#  - 18800://example.org:80
+#  - http://example.org:80
+  - http://192.168.1.16:18800
+
+
+#
+# Report only instead of actually dropping/blocking/proxying bad/invalid requests.
+# If this is true, will notify that the request would be block if that option wouldn't be
+# set.
+#
+# Default: False
+#
+report_only: False
+
+
+#
+# Log full bodies of dropped requests.
+#
+# Default: False
+#
+log_dropped: False
+
+
+#
+# Throttle down number of log entries emitted for single Peer to lower I/O overhead.
+#
+# When you operate your Beacon in interactive mode, the RedWardenLite can go crazy with logging
+# all of the allowed requests. We can throttle that down to minimize I/O and CPU impact.
+#
+# This option specifies number of seconds to wait before adding next log entry for specific IP,
+# regardless of whether it was allowed or dropped.
+#
+# Default:
+#       log_request_delay: 60
+#       requests_threshold: 3
+#
+throttle_down_peer_logging:
+  log_request_delay: 60
+  requests_threshold: 3
+
+
+#
+# What to do with the request originating not conforming to Beacon, whitelisting or
+# ProxyPass inclusive statements:
+#   - 'redirect' it to another host with (HTTP 301),
+#   - 'reset' a TCP connection with connecting client
+#   - 'proxy' the request, acting as a reverse-proxy against specified action_url
+#       (may be dangerous if client fetches something it shouldn't supposed to see!)
+#
+# Valid values: 'reset', 'redirect', 'proxy'.
+#
+# Default: redirect
+#
+drop_action: redirect
+
+
+#
+# If a request fails to comply with the defined rules, this is where we should proxy/redirect those requests.
+# The HTTP/HTTPS protocol used for proxying will mirror the originating
+# request's protocol. Redirection, on the other hand, adheres to the protocol specified in action_url.
+#
+# This value can either be a comma-separated list of hosts or a YAML array to indicate that
+# the target action_url should be chosen at random:
+#   action_url: https://google.com, https://gmail.com, https://calendar.google.com
+#
+# Default: https://google.com
+#
+action_url:
+  - https://google.com
+
+
+#
+# ProxyPass alike functionality known from mod_proxy.
+#
+# If an inbound request matches the given conditions, the request is proxied to the specified host,
+# the response is fetched from the target host and then returned to the client.
+#
+# The protocol used for ProxyPass will align with the one from the originating request, unless specified explicitly.
+# If the host part contains http:// or https:// schema, that schema will be used.
+#
+# Syntax:
+#   proxy_pass:
+#     - /url_to_be_passed example.com
+#     - /url_to_be_passed_onto_http http://example.com
+#
+# The first parameter 'url' is a case-insensitive regex. It must start with '/'.
+# The regex begin/end operators are implied and will form the following regex to be
+# matched against the inbound request's URL:
+#     '^/' + url_to_be_passed + '$'
+#
+# Here are the URL rewriting rules:
+#   For example, an inbound request:
+#       https://example.org/dl/file-to-be-served.txt
+#
+#   Rules:
+#     a) The entire URL is substituted for the proxy pass:
+#       proxy_pass:
+#           - /dl/.+   https://localhost:8888/
+#                ====> This will redirect to https://localhost:8888/
+#
+#     b) Only the host is substituted for the proxy pass:
+#       proxy_pass:
+#           - /dl/.+   localhost:8888
+#                ====> This will redirect to https://localhost:8888/dl/file-to-be-served.txt
+#
+# The following options are supported:
+#   - nodrop  - Process this rule first, before evaluating any DROP-logic.
+#               This does not allow the processed request to be dropped.
+#
+# Default: No proxy pass rules.
+#
+proxy_pass:
+  # These are example proxy_pass definitions:
+  #- /foobar\d*  bing.com
+  #- /myip       http://ip-api.com/json/
+  #- /alwayspass google.com nodrop
+
+
+
+#
+# Every time Redirector decides to pass request to the Destination URLs, an MD5 sum may be computed against that request and saved in sqlite
+# file. Should there be any subsequent request evaluating to a hash value that was seen & stored
+# previously, that request is considered as Replay-Attack attempt and thus should be banned.
+#
+# Default: False
+#
+mitigate_replay_attack: False
+
+
+#
+# List of whitelisted IP addresses/CIDR ranges.
+# Inbound packets from these IP address/ranges will always be passed towards specified Destination URLs without
+# any sort of verification or validation.
+#
+whitelisted_ip_addresses:
+  - 127.0.0.0/24
+
+
+#
+# Maintain a volatile, dynamic list of whitelisted Peers (IPv4 addresses) based on the number of requests
+# they have originated that were allowed and passed to the Destination URLs.
+#
+# This option reduces request processing time. Whenever a request comes from a previously whitelisted
+# peer, it is immediately accepted, given that the peer was allowed to pass
+# N requests to the Destination URLs on previous occasions.
+#
+# This whitelist is cleared whenever RedWardenLite is terminated. It is only maintained in the script's memory.
+#
+# Parameters:
+#   - number_of_valid_http_get_requests: defines the number of successful HTTP GET requests
+#                                        that determine whether a Peer can be trusted.
+#   - number_of_valid_http_post_requests: defines the number of successful HTTP POST requests
+#                                         that determine whether a Peer can be trusted.
+#
+# A value of 0 denotes disabled counting of a corresponding type of requests.
+# The function is disabled if the configuration option is missing.
+#
+# Default: (dynamic whitelist enabled)
+#       number_of_valid_http_get_requests: 15
+#       number_of_valid_http_post_requests: 5
+#
+add_peers_to_whitelist_if_they_sent_valid_requests:
+  number_of_valid_http_get_requests: 15
+  number_of_valid_http_post_requests: 5
+
+
+
+#
+# Ban peers based on their IPv4 address. The blacklist with IP address to check against is specified
+# in 'ip_addresses_blacklist_file' option.
+#
+# Default: True
+#
+ban_blacklisted_ip_addresses: True
+
+
+#
+# Specifies external list of CIDRs with IPv4 addresses to ban. Each entry in that file
+# can contain a single IPv4, a CIDR or a line with commentary in following format:
+#     1.2.3.4/24 # Super Security System
+#
+# Default: data/banned_ips.txt
+#
+ip_addresses_blacklist_file: data/banned_ips.txt
+
+
+#
+# Specifies external list of keywords to ban during reverse-IP lookup, User-Agents or
+# HTTP headers analysis stage. The file can contain lines beginning with '#' to mark comments.
+#
+# Default: data/banned_words.txt
+#
+banned_agents_words_file: data/banned_words.txt
+
+
+#
+# Specifies external list of phrases that should override banned phrases in case of ambiguity.
+# If the request was to be banned because of a ambigue phrase, the override agents file can
+# make the request pass blocking logic if it contained "allowed" phrase.
+#
+# Default: data/banned_words_override.txt
+#
+override_banned_agents_file: data/banned_words_override.txt
+
+
+#
+# Ban peers based on their IPv4 address' resolved ISP/Organization value or other details.
+# Whenever a peer connects to our proxy, we'll take its IPv4 address and use one of the specified
+# APIs to collect all the available details about the address. Whenever a banned word
+# (of a security product) is found in those details - peer will be banned.
+# List of API keys for supported platforms are specified in ''. If there are no keys specified,
+# only providers that don't require API keys will be used (e.g. ip-api.com, ipapi.co)
+#
+# This setting affects execution of policy:
+#   - drop_ipgeo_metadata_containing_banned_keywords
+#
+# Default: True
+#
+verify_peer_ip_details: False
+
+
+#
+# Specifies a list of API keys for supported API details collection platforms.
+# If 'verify_peer_ip_details' is set to True and there is at least one API key given in this option, the
+# proxy will collect details of inbound peer's IPv4 address and verify them for occurences of banned words
+# known from various security vendors. Do take a note that various API details platforms have their own
+# thresholds for amount of lookups per month. By giving more than one API keys, the script will
+# utilize them in a random order.
+#
+# To minimize number of IP lookups against each platform, the script will cache performed lookups in an
+# external file named 'ip-lookups-cache.json'
+#
+# Supported IP Lookup providers:
+#   - ip-api.com: No API key needed, free plan: 45 requests / minute
+#   - ipapi.co: No API key needed, free plan: up to 30000 IP lookups/month and up to 1000/day.
+#   - ipgeolocation.io: requires an API key, up to 30000 IP lookups/month and up to 1000/day.
+#
+# Default: empty dictionary
+#
+ip_details_api_keys:
+  ipgeolocation_io:
+
+
+#
+# Restrict incoming peers based on their IP Geolocation information.
+# Available only if 'verify_peer_ip_details' was set to True.
+# IP Geolocation determination may happen based on the following supported characteristics:
+#   - organization,
+#   - continent,
+#   - continent_code,
+#   - country,
+#   - country_code,
+#   - city,
+#   - timezone
+#
+# The Peer will be served if at least one geolocation condition holds true for him
+# (inclusive/alternative arithmetics).
+#
+# If no determinants are specified, IP Geolocation will not be taken into consideration while accepting peers.
+# If determinants are specified, only those peers whose IP address matched geolocation determinants will be accepted.
+#
+# Each of the requirement values may be regular expression. Matching is case-insensitive.
+#
+# Following (continents_code, continent) pairs are supported:
+#    ('AF', 'Africa'),
+#    ('AN', 'Antarctica'),
+#    ('AS', 'Asia'),
+#    ('EU', 'Europe'),
+#    ('NA', 'North america'),
+#    ('OC', 'Oceania'),
+#    ('SA', 'South america)'
+#
+# Proper IP Lookup details values can be established by issuing one of the following API calls:
+#   $ curl -s 'https://ipapi.co/TARGET-IP-ADDRESS/json/'
+#   $ curl -s 'http://ip-api.com/json/TARGET-IP-ADDRESS'
+#
+# The organization/isp/as/asn/org fields will be merged into a common organization list of values.
+#
+ip_geolocation_requirements:
+  organization:
+    #- My\s+Target\+Company(?: Inc.)?
+  continent:
+  continent_code:
+  country:
+  country_code:
+  city:
+  timezone:
+
+
+#
+# Fine-grained requests dropping policy - lets you decide which checks
+# you want to have enforced and which to skip by setting them to False
+#
+# Default: all checks enabled
+#
+policy:
+  # [IP: ALLOW, reason:0] Request conforms ProxyPass entry (url="..." host="..."). Passing request to specified host
+  allow_proxy_pass: True
+  # [IP: ALLOW, reason:2] Peer's IP was added dynamically to a whitelist based on a number of allowed requests
+  allow_dynamic_peer_whitelisting: True
+  # [IP: DROP, reason:2] HTTP header name contained banned word
+  drop_http_banned_header_names: True
+  # [IP: DROP, reason:3] HTTP header value contained banned word:
+  drop_http_banned_header_value: True
+  # [IP: DROP, reason:4b] peer's reverse-IP lookup contained banned word
+  drop_dangerous_ip_reverse_lookup: True
+  # [IP: DROP, reason:4e] Peer's IP geolocation metadata contained banned keyword! Peer banned in generic fashion.
+  drop_ipgeo_metadata_containing_banned_keywords: True
+  # [IP: DROP, reason:5] HTTP request did not contain expected header
+  drop_request_without_expected_header: False
+  # [IP: DROP, reason:6] HTTP request did not contain expected header value:
+  drop_request_without_expected_header_value: False
+  # [IP: DROP, reason:7] Unexpected HTTP method:
+  drop_request_without_expected_http_method: True
+  # [IP: DROP, reason:8] Unexpected URIs:
+  drop_request_without_expected_uri: False
+
+# Policy: drop_request_without_expected_header
+expected_headers:
+  - user-agent
+
+# Policy: drop_request_without_expected_header_value
+expected_headers_value:
+  user-agent: 'qawe'
+  accept-language: 'Eng'
+
+
+expected_http_methods:
+  - GET
+  - POST
+
+expected_uri:
+  - /
+#  - /api
+
+
+
+#
+# This option specifies which headers, coming from the responses of the Destination URLs, should be removed.
+#
+remove_these_response_headers:
+  - Content-Encoding
+

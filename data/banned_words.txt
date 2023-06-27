@@ -1,0 +1,21 @@
+#
+# Words from this file will be matched against inbound request
+# by several checks to determine whether request originates from
+# Security-vendor, Blue Team or other defensive clients.
+#
+# These words will be checked against:
+#	- reverse-ip lookup hostname
+#	- IP geolocation data, such as organization name
+#	- HTTP header names and values
+#   - User-agent string
+#
+
+
+# Dodgy User-Agents words
+
+# None
+curl
+wget
+python-urllib
+lynx
+slackbot-linkexpanding
